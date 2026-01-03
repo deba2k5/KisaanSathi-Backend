@@ -8,16 +8,15 @@ import {
   farmerAssistantAgent,
   // diseaseWorkflow,
   // weatherWorkflow,
-  // loanWorkflow,
-  // insuranceWorkflow,
 } from "./agents/farmerAssistant.agent";
 import { loanWorkflow } from "./workflows/loan.workflow";
+import { insuranceWorkflow } from "./workflows/insurance.workflow";
 export const mastra = new Mastra({
   workflows: {
     // diseaseWorkflow,
     // weatherWorkflow,
     loanWorkflow,
-    // insuranceWorkflow,
+    insuranceWorkflow,
   },
   agents: {
     farmerAssistantAgent,
