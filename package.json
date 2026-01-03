@@ -5,7 +5,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/app.js",
-    "dev": "nodemon src/app.js"
+    "dev": "nodemon src/app.js",
+    "seed": "node src/scripts/seed.js"
   },
   "repository": {
     "type": "git",
@@ -24,17 +25,19 @@
     "@modelcontextprotocol/sdk": "^1.25.1",
     "axios": "^1.13.2",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
     "firebase-admin": "^13.6.0",
     "groq-sdk": "^0.37.0",
     "mongodb": "^7.0.0",
-    "mongoose": "^9.1.1",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "nodemon": "^3.1.11",
     "winston": "^3.19.0",
     "zod": "^4.3.4"
+  },
+  "devDependencies": {
+    "dotenv": "^17.2.3",
+    "mongoose": "^9.1.1"
   }
 }

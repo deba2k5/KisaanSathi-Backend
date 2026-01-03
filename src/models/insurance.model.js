@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const insuranceClaimSchema = new mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
