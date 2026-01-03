@@ -2,8 +2,8 @@ const groqService = require('../services/groqService');
 const strategies = require('../ai/strategies');
 const { storeDocument } = require('../services/ragService');
 
-const DEFAULT_MODEL = "llama3-8b-8192";
-const FALLBACK_MODEL = "llama3-70b-8192"; // Or another stable model
+const DEFAULT_MODEL = "llama3-70b-8192";
+const FALLBACK_MODEL = "llama3-8b-8192"; // Or another stable model
 
 const analyzeCrop = async (req, res) => {
     const { type, data, prompt: userPrompt } = req.body;

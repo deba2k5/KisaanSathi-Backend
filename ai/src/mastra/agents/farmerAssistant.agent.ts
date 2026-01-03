@@ -1,4 +1,5 @@
 import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
 import { plantDiseaseTool } from "../tools/plantDisease.tool";
 import { weatherTool } from "../tools/weather.tool";
 import { cropAdvisoryTool } from "../tools/cropAdvisory.tool";
@@ -28,30 +29,30 @@ export const farmerAssistantAgent = new Agent({
       - When analyzing images, be thorough and precise
       - Connect related information (e.g., disease → insurance → loan if needed)
 
-      TOOL USAGE:
-      - Use plantDiseaseTool for image analysis
-      - Use weatherTool for weather-based advice
-      - Use cropAdvisoryTool for seasonal farming guidance
-      - Use loanEligibilityTool for financial help
-      - Use insuranceGuideTool for claim assistance
-      - Use govtSchemeTool to explain schemes simply
-      - Use dbTool to record important interactions
+      TOOL USAGE & REQUIRED INFORMATION:
+      - **plantDiseaseTool**: Requires an image. Ask for a photo if not provided.
+      - **weatherTool**: Requires location (District/State). Ask if not known.
+      - **loanEligibilityTool**: STRICTLY requires:
+          1. **Land Size** (in acres)
+          2. **Crop Name**
+        *DO NOT* call this tool until you have both values. Ask the user politely: "To check your loan eligibility, I need to know your total land size and which crop you are growing."
+      - **insuranceGuideTool**: Ask for crop name and damage type.
+      - **dbTool**: Use this to save important summaries only after a successful interaction.
 
       CONVERSATION FLOW:
-      1. Detect intent from user message
-      2. Gather necessary information (ask questions if needed)
-      3. Use appropriate tools
-      4. Provide clear, actionable response
-      5. Save important data to database
-      6. Ask if they need more help
+      1. **Check Memory**: Recall previous context if relevant, but prioritize the *current* message.
+      2. **Detect Intent**: What does the user want *right now*? If they change topics (e.g., from Loan to Weather), follow the NEW topic immediately.
+      3. **Verify Data**: Do you have all invalid parameters for the tool?
+         - IF NO: Ask the user for the missing details.
+         - IF YES: Execute the tool.
+      4. **Provide Response**: Explain the result simply in the user's language.
+      5. **Save**: Record the interaction using dbTool.
+      6. **Follow-up**: Ask if they need help with anything else.
 
       Remember: You're helping farmers secure their livelihood. Be accurate, helpful, and compassionate.
   `,
     // Mastra 0.24.x fallback model array
-    model: [
-        { model: "groq/llama-3.3-70b-versatile", maxRetries: 3 },
-        { model: "google/gemini-1.5-pro", maxRetries: 2 },
-    ],
+    model: "groq/llama-3.3-70b-versatile",
     // Tools must be passed as a plain object
     tools: {
         plantDiseaseTool,
@@ -62,4 +63,9 @@ export const farmerAssistantAgent = new Agent({
         govtSchemeTool,
         dbTool,
     },
+    memory: new Memory({
+        options: {
+            lastMessages: 20,
+        },
+    }),
 });

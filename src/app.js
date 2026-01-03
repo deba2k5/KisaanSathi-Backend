@@ -43,6 +43,7 @@ app.use('/api/maps', mapRoutes);
 app.use('/crop', cropRoutes); // Keeping paths consistent with frontend usage
 app.use('/loan', loanRoutes);
 app.use('/insurance', insuranceRoutes);
+app.use('/api/news', require('./routes/newsRoutes'));
 
 // Basic route
 app.get('/', (req, res) => {

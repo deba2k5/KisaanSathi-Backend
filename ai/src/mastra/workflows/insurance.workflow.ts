@@ -7,88 +7,118 @@ import { dbTool } from "../tools/db.tool";
 
 const getInsuranceGuidanceStep = createStep({
     id: "get-insurance-guidance",
-    inputSchema: insuranceGuideTool.inputSchema,
-    outputSchema: insuranceGuideTool.outputSchema,
+    inputSchema: z.object({
+        disease: z.string(),
+        severity: z.enum(["low", "medium", "high"]),
+        crop: z.string(),
+        provider: z.string(),
+        uin: z.string().optional(),
+        policyNumber: z.string().optional(),
+    }),
+    outputSchema: z.object({
+        guidance: insuranceGuideTool.outputSchema,
+        claimData: z.object({
+            provider: z.string(),
+            uin: z.string().optional(),
+            policyNumber: z.string().optional(),
+            disease: z.string(),
+            severity: z.string(),
+            crop: z.string(),
+        }),
+    }),
     execute: async ({ inputData }) => {
-        // Direct tool invocation (undocumented but commonly used)
-        return insuranceGuideTool.execute(inputData as any);
-    },
-});
-
-/* -------------------- Shared Final Output -------------------- */
-
-const insuranceResponseSchema = z.object({
-    message: z.string(),
-});
-
-/* -------------------- Step 2A: Eligible → Create Claim Draft -------------------- */
-
-const createClaimDraftStep = createStep({
-    id: "create-claim-draft",
-    inputSchema: insuranceGuideTool.outputSchema,
-    outputSchema: insuranceResponseSchema,
-    execute: async ({ inputData, getInitData }) => {
-        const { userId, diseaseReportId } = getInitData();
-
-        await dbTool.execute({
+        const guidance = await insuranceGuideTool.execute({
             context: {
-                collection: "insurance_claims",
-                data: {
-                    userId,
-                    diseaseReportId,
-                    status: "draft",
-                    documents: [],
-                    createdAt: new Date().toISOString(),
-                },
+                disease: inputData.disease,
+                severity: inputData.severity,
+                crop: inputData.crop,
             },
         } as any);
 
-        const documents = inputData.requiredDocuments
-            .map((d: string) => `- ${d}`)
-            .join("\n");
-
-        const steps = inputData.steps
-            .map((s: string, i: number) => `${i + 1}. ${s}`)
-            .join("\n");
-
         return {
-            message: `🛡️ Insurance Claim Guidance
-
-You are eligible to file a crop insurance claim.
-
-📄 Required Documents:
-${documents}
-
-📋 Steps:
-${steps}
-
-⏱️ Timeline:
-${inputData.timeline}
-
-A draft claim has been created.`,
+            guidance,
+            claimData: {
+                provider: inputData.provider,
+                uin: inputData.uin,
+                policyNumber: inputData.policyNumber,
+                disease: inputData.disease,
+                severity: inputData.severity,
+                crop: inputData.crop,
+            },
         };
     },
 });
 
-/* -------------------- Step 2B: Not Eligible -------------------- */
+/* -------------------- Step 2: Create Claim if Eligible -------------------- */
 
-const noClaimStep = createStep({
-    id: "no-claim-response",
-    inputSchema: insuranceGuideTool.outputSchema,
-    outputSchema: insuranceResponseSchema,
+const createClaimStep = createStep({
+    id: "create-insurance-claim",
+    inputSchema: z.object({
+        guidance: insuranceGuideTool.outputSchema,
+        claimData: z.object({
+            provider: z.string(),
+            uin: z.string().optional(),
+            policyNumber: z.string().optional(),
+            disease: z.string(),
+            severity: z.string(),
+            crop: z.string(),
+        }),
+    }),
+    outputSchema: z.object({
+        message: z.string(),
+        claimCreated: z.boolean(),
+        claimId: z.string().optional(),
+    }),
     execute: async ({ inputData }) => {
-        const steps = inputData.steps
-            .map((s: string) => `- ${s}`)
-            .join("\n");
+        const { guidance, claimData } = inputData;
+
+        if (!guidance.claimPossible) {
+            return {
+                message: `ℹ️ Insurance Claim Update\n\n${guidance.timeline}\n\nFocus on treatment and recovery. Keep documenting damage for future reference.`,
+                claimCreated: false,
+            };
+        }
+
+        // Create claim via controller
+        const dbResult = await dbTool.execute({
+            context: {
+                collection: "insuranceClaim",
+                data: {
+                    provider: claimData.provider,
+                    uin: claimData.uin || "",
+                    policyNumber: claimData.policyNumber || "",
+                    // Controller will add mock validation scores
+                },
+            },
+        } as any);
+
+        const documents = guidance.requiredDocuments
+            ?.map((d: string) => `- ${d}`)
+            .join("\n") || "None specified";
+
+        const steps = guidance.steps
+            ?.map((s: string, i: number) => `${i + 1}. ${s}`)
+            .join("\n") || "Follow standard claim process";
 
         return {
-            message: `ℹ️ Insurance Claim Update
+            message: `🛡️ Insurance Claim Created
 
-${inputData.timeline}
+✅ Claim ID: ${dbResult.id || "Pending"}
 
+You are eligible to file a crop insurance claim for ${claimData.crop} affected by ${claimData.disease}.
+
+📄 Required Documents:
+${documents}
+
+📋 Next Steps:
 ${steps}
 
-Focus on treatment and recovery. Keep documenting damage.`,
+⏱️ Timeline:
+${guidance.timeline}
+
+Your claim has been submitted and is under review.`,
+            claimCreated: true,
+            claimId: dbResult.id,
         };
     },
 });
@@ -101,20 +131,16 @@ export const insuranceWorkflow = createWorkflow({
         disease: z.string(),
         severity: z.enum(["low", "medium", "high"]),
         crop: z.string(),
-        userId: z.string(),
-        diseaseReportId: z.string(),
+        provider: z.string().describe("Insurance provider name"),
+        uin: z.string().optional().describe("Universal Insurance Number"),
+        policyNumber: z.string().optional().describe("Policy number"),
     }),
-    outputSchema: insuranceResponseSchema,
+    outputSchema: z.object({
+        message: z.string(),
+        claimCreated: z.boolean(),
+        claimId: z.string().optional(),
+    }),
 })
     .then(getInsuranceGuidanceStep)
-    .branch([
-        [
-            async ({ inputData }) => inputData.claimPossible === true,
-            createClaimDraftStep,
-        ],
-        [
-            async ({ inputData }) => inputData.claimPossible === false,
-            noClaimStep,
-        ],
-    ])
+    .then(createClaimStep)
     .commit();

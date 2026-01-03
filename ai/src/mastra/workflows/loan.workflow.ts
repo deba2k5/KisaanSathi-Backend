@@ -8,34 +8,55 @@ import { dbTool } from "../tools/db.tool";
 const checkEligibilityStep = createStep({
     id: "check-loan-eligibility",
     inputSchema: z.object({
-        landSizeAcres: z.number(),
-        crop: z.string(),
-        location: z.string().optional(),
-        userId: z.string(),
+        farmerName: z.string(),
+        farmLocation: z.object({
+            lat: z.number(),
+            lng: z.number()
+        }).optional(),
+        cropType: z.string(),
+        acres: z.number().describe("Land size in acres"),
+        loanPurpose: z.string().describe("Purpose of the loan (e.g., seeds, equipment)"),
+        requestedAmount: z.number().describe("Amount requested by farmer"),
+        tenureMonths: z.number(),
     }),
     outputSchema: z.object({
         eligibility: loanEligibilityTool.outputSchema,
-        userContext: z.object({
-            userId: z.string(),
-            crop: z.string(),
-            landSizeAcres: z.number(),
+        loanData: z.object({
+            farmerName: z.string(),
+            farmLocation: z.object({
+                lat: z.number(),
+                lng: z.number()
+            }).optional(),
+            cropType: z.string(),
+            acres: z.number(),
+            loanPurpose: z.string(),
+            requestedAmount: z.number(),
+            tenureMonths: z.number(),
         }),
     }),
     execute: async ({ inputData }) => {
         const eligibility = await loanEligibilityTool.execute({
             context: {
-                landSizeAcres: inputData.landSizeAcres,
-                crop: inputData.crop,
-                location: inputData.location,
+                farmerName: inputData.farmerName,
+                farmLocation: inputData.farmLocation,
+                cropType: inputData.cropType,
+                acres: inputData.acres,
+                loanPurpose: inputData.loanPurpose,
+                requestedAmount: inputData.requestedAmount,
+                tenureMonths: inputData.tenureMonths,
             },
         } as any);
 
         return {
             eligibility,
-            userContext: {
-                userId: inputData.userId,
-                crop: inputData.crop,
-                landSizeAcres: inputData.landSizeAcres,
+            loanData: {
+                farmerName: inputData.farmerName,
+                farmLocation: inputData.farmLocation,
+                cropType: inputData.cropType,
+                acres: inputData.acres,
+                loanPurpose: inputData.loanPurpose,
+                requestedAmount: inputData.requestedAmount,
+                tenureMonths: inputData.tenureMonths,
             },
         };
     },
@@ -47,35 +68,57 @@ const persistLoanApplicationStep = createStep({
     id: "persist-loan-application",
     inputSchema: z.object({
         eligibility: loanEligibilityTool.outputSchema,
-        userContext: z.object({
-            userId: z.string(),
-            crop: z.string(),
-            landSizeAcres: z.number(),
+        loanData: z.object({
+            farmerName: z.string(),
+            farmLocation: z.object({
+                lat: z.number(),
+                lng: z.number()
+            }).optional(),
+            cropType: z.string(),
+            acres: z.number(),
+            loanPurpose: z.string(),
+            requestedAmount: z.number(),
+            tenureMonths: z.number(),
         }),
     }),
-    outputSchema: loanEligibilityTool.outputSchema,
+    outputSchema: z.object({
+        eligibility: loanEligibilityTool.outputSchema,
+        saved: z.boolean(),
+        loanId: z.string().optional(),
+    }),
     execute: async ({ inputData }) => {
-        const { eligibility, userContext } = inputData;
+        const { eligibility, loanData } = inputData;
 
         if (!eligibility.eligible) {
-            return eligibility;
+            return {
+                eligibility,
+                saved: false,
+            };
         }
 
-        await dbTool.execute({
+        // Save to database via controller endpoint
+        const dbResult = await dbTool.execute({
             context: {
-                collection: "loan_applications",
+                collection: "loanApplication",
                 data: {
-                    userId: userContext.userId,
-                    crop: userContext.crop,
-                    landSizeAcres: userContext.landSizeAcres,
-                    estimatedAmount: eligibility.estimatedAmount,
-                    eligible: true,
-                    appliedAt: new Date().toISOString(),
+                    farmerName: loanData.farmerName,
+                    farmLocation: loanData.farmLocation,
+                    cropType: loanData.cropType,
+                    acres: loanData.acres,
+                    loanPurpose: loanData.loanPurpose,
+                    requestedAmount: loanData.requestedAmount,
+                    tenureMonths: loanData.tenureMonths,
+                    fraudRiskScore: eligibility.fraudRiskScore,
+                    status: eligibility.fraudRiskScore < 30 ? 'APPROVED' : 'PENDING',
                 },
             },
         } as any);
 
-        return eligibility;
+        return {
+            eligibility,
+            saved: dbResult.success,
+            loanId: dbResult.id,
+        };
     },
 });
 
@@ -83,14 +126,31 @@ const persistLoanApplicationStep = createStep({
 
 const formatResponseStep = createStep({
     id: "format-loan-response",
-    inputSchema: loanEligibilityTool.outputSchema,
+    inputSchema: z.object({
+        eligibility: loanEligibilityTool.outputSchema,
+        saved: z.boolean(),
+        loanId: z.string().optional(),
+    }),
     outputSchema: z.object({
         message: z.string(),
     }),
     execute: async ({ inputData }) => {
-        return {
-            message: inputData.reason,
-        };
+        const { eligibility, saved, loanId } = inputData;
+
+        let message = eligibility.reason;
+
+        if (saved && loanId) {
+            message += `\n\n✅ Application saved successfully (ID: ${loanId})`;
+            if (eligibility.fraudRiskScore < 30) {
+                message += `\n🎉 Your loan has been auto-approved! Low risk score detected.`;
+            } else {
+                message += `\n⏳ Your application is under review.`;
+            }
+        } else if (!eligibility.eligible) {
+            message += `\n\n❌ Unfortunately, you don't meet the minimum requirements.`;
+        }
+
+        return { message };
     },
 });
 
@@ -99,10 +159,16 @@ const formatResponseStep = createStep({
 export const loanWorkflow = createWorkflow({
     id: "loan-eligibility-workflow",
     inputSchema: z.object({
-        landSizeAcres: z.number(),
-        crop: z.string(),
-        location: z.string().optional(),
-        userId: z.string(),
+        farmerName: z.string(),
+        farmLocation: z.object({
+            lat: z.number(),
+            lng: z.number()
+        }).optional(),
+        cropType: z.string(),
+        acres: z.number(),
+        loanPurpose: z.string(),
+        requestedAmount: z.number(),
+        tenureMonths: z.number(),
     }),
     outputSchema: z.object({
         message: z.string(),

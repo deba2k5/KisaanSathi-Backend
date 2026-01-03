@@ -40,8 +40,8 @@ const storeDocument = async (id, content, metadata, namespace) => {
 
 const seedKnowledgeBase = async () => {
     try {
-        const count = await KnowledgeBase.countDocuments();
-        if (count > 0) return; // Already seeded
+        // const count = await KnowledgeBase.countDocuments();
+        // if (count > 0) return; // Already seeded
 
         console.log("Seeding Knowledge Base from synthetic datasets...");
         const fs = require('fs');

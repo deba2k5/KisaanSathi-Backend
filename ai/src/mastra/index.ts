@@ -11,10 +11,12 @@ import {
 } from "./agents/farmerAssistant.agent";
 import { loanWorkflow } from "./workflows/loan.workflow";
 import { insuranceWorkflow } from "./workflows/insurance.workflow";
+import { weatherWorkflow } from "./workflows/weather.workflow";
+import { diseaseWorkflow } from "./workflows/disease.workflow";
 export const mastra = new Mastra({
   workflows: {
-    // diseaseWorkflow,
-    // weatherWorkflow,
+    diseaseWorkflow,
+    weatherWorkflow,
     loanWorkflow,
     insuranceWorkflow,
   },
@@ -22,8 +24,9 @@ export const mastra = new Mastra({
     farmerAssistantAgent,
   },
   storage: new LibSQLStore({
-    url: ":memory:", // or 'file:../mastra.db' for persistence
+    url: ":memory:",
   }),
+
   logger: new PinoLogger({
     name: "Mastra",
     level: "info",

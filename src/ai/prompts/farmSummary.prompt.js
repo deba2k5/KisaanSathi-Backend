@@ -1,17 +1,38 @@
-module.exports = ({ data }) => `
-You are an expert agricultural consultant.
 
-Task: Generate a Daily Farm Summary.
+const farmSummaryPrompt = ({ data }) => {
+    const { user, weather } = data;
+    const locationName = user?.location?.district || user?.location?.state || "India";
+    const crops = user?.crops?.length ? user.crops.join(', ') : 'General crops';
+    const landSize = user?.landSize || 'Unknown';
+    const soilType = user?.soilType || 'General';
 
-Context:
-- Location: ${data.user.locationLat}, ${data.user.locationLong}
-- Land: ${data.user.totalLand} acres
-- Crops: ${data.user.crops ? data.user.crops.join(', ') : 'General crops'}
-- Weather: ${JSON.stringify(data.weather)}
+    return `
+You are a daily farm advisor for a farmer in ${locationName}.
+** Time **: Morning Briefing
 
-Output Requirements:
-1. Friendly greeting for ${data.user.name}.
-2. Weather impact analysis.
-3. 2-3 Actionable advice points.
-4. Keep it warm, professional, and under 200 words.
+    ** Farmer Profile:**
+- ** Crops **: ${crops}
+- ** Land **: ${landSize} acres
+    - ** Soil Type **: ${soilType}
+
+** Weather Forecast(Today & Tomorrow):**
+    ${JSON.stringify(weather)}
+
+** Task:**
+    Generate a "Daily Farm Insight" summary.
+1. ** Greeting **: Warm and encouraging(e.g., "Good morning, Kisaan friend!").
+2. ** Weather Highlight **: Simple summary(e.g., "Heavy rain expected today" or "Clear skies, good for spraying").
+3. ** Actionable Advice **: Connect the weather * directly * to their crops.
+    - * Example *: "Since it is raining, DO NOT water your Cotton today."
+    - * Example *: "High humidity detected, watch out for fungal attacks on your Rice."
+4. ** Market / General Tip **: One quick tip about mandi prices or general care.
+
+** Tone **: Actionable, Urgent(if bad weather), otherwise steady and helpful.
+** Length **: Concisely 3 - 4 sentences.
+
+Output simple text.
 `;
+};
+
+module.exports = farmSummaryPrompt;
+
